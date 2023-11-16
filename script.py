@@ -21,6 +21,9 @@ initial_mask = None
 mouse_state = 'up'
 mouse = None
 
+SCREEN_WIDTH = 2880
+SCREEN_HEIGHT = 1920
+
 def create_mask_from_vertices(vertices, radius):
     """
     Create a binary mask image from the filtered vertices.
@@ -168,6 +171,7 @@ def process_lidar_frames(frames):
 def visualize_lidar_frames(frames):
     
     try:
+        global is_running
         global initial_mask, mouse_state
 
         img = np.zeros((WINDOW_WIDTH, WINDOW_HEIGHT, 3), dtype=np.uint8)
@@ -184,15 +188,15 @@ def visualize_lidar_frames(frames):
             distances = np.array([point[0] for point in frame['points']], dtype=np.float32)
             intensities = np.array([point[1] for point in frame['points']], dtype=np.float32)
 
-            xs =  distances * 0.2 * np.cos(angles)
-            ys = distances * 0.2 * np.sin(angles)
+            xs =  distances * 0.3 * np.cos(angles)
+            ys = distances * 0.3 * np.sin(angles)
             points = np.vstack((xs, ys, intensities)).T
 
             all_points = np.vstack((all_points, points))
 
         # フィルタリング条件を設定
         x_min, x_max = -300, 300  # xの最小値と最大値
-        y_min, y_max = 0, 300  # yの最小値と最大値
+        y_min, y_max = 0, 500  # yの最小値と最大値
 
         # フィルタリングを適用
         filter_mask = (all_points[:, 0] >= x_min) & (all_points[:, 0] <= x_max) & \
@@ -237,8 +241,8 @@ def visualize_lidar_frames(frames):
 
             if means:
                     mean = means[-1]
-                    screen_x = int( mean[0] * 10.0 + 400) 
-                    screen_y = int(mean[1] * 10.0) 
+                    screen_x = int( -mean[0] * 10.0 + SCREEN_WIDTH // 2) 
+                    screen_y = int(SCREEN_HEIGHT - mean[1] * 10.0) 
                     
                     mouse.position = (screen_x, screen_y)
                     print(mouse.position)
@@ -250,8 +254,10 @@ def visualize_lidar_frames(frames):
             mouse_state = 'up'
 
         cv2.imshow("Lidar Data", img)
+
     except Exception as e:        
         print(f"Error occurred: {e}")
+        is_running = False
 
 def read_data_from_serial():
     # 利用可能なシリアルポートをリストアップ
@@ -278,12 +284,11 @@ def read_data_from_serial():
                     process_lidar_frames(frames)
                     #all_frames.extend(frames)
         except serial.SerialException as e:
-            print(f"シリアルポートの接続中にエラーが発生しました: {e}")
-    
+            print(f"シリアルポートの接続中にエラーが発生しました: {e}")    
     
 def visualize_lidar_data_continuously():
+    global is_running
     try:
-        global is_running
         while is_running:  # この条件を追加
             if all_surroundings and len(all_surroundings[-1]) > 5:
                 visualize_lidar_frames(all_surroundings[-1])
@@ -295,11 +300,12 @@ def visualize_lidar_data_continuously():
             if key == ord('q') or key == 27:  # qキーまたはESCキーが押されたら
                 print("end!")
                 is_running = False
+
     except Exception as e:        
         print(f"Error occurred: {e}")
 
 def main():
-    global is_running , mouse
+    global mouse
 
     try:
         mouse = Controller()
