@@ -7,7 +7,10 @@ import threading
 import time
 
 
-all_frames = []  # 共有のフレームリスト
+all_surroundings = []  # 一周のデータを保存するリスト
+current_surrounding = []  # 現在の周囲データを保存するリスト
+last_angle = 0  # 最後に確認した角度
+
 is_running = True  # スレッドの実行状態を示す変数
 
 WINDOW_WIDTH = 800
@@ -41,11 +44,22 @@ def get_lidar_frames_from_buffer(buffer):
 
 
 
+# LIDARフレームデータが正しいかを確認
 def check_lidar_frame_data(data):
-    return data[1] == 0x2C and len(data) == 47
+    return len(data) == 47 and data[1] == 0x2C 
 
+# CRC8チェックサムの計算
 def calc_crc8(data):
-    return sum(data) % 256
+    crc = 0
+    for byte in data:
+        crc ^= byte
+        for _ in range(8):
+            if crc & 0x80:
+                crc = (crc << 1) ^ 0x31
+            else:
+                crc <<= 1
+            crc &= 0xFF
+    return crc
 
 def get_lidar_frame(data):
     try:
@@ -71,6 +85,18 @@ def get_lidar_frame(data):
     except Exception as e:        
         print(f"Error occurred: {e}")
 
+
+def process_lidar_frames(frames):
+    global current_surrounding, last_angle, all_surroundings
+
+    for frame in frames:
+        if frame['startAngle'] < last_angle:
+            # 一周が完了したら、current_surroundingをall_surroundingsに追加
+            all_surroundings.append(current_surrounding)
+            current_surrounding = []
+        
+        current_surrounding.append(frame)
+        last_angle = frame['startAngle']
 
 def visualize_lidar_frames(frames):
     try:
@@ -112,7 +138,8 @@ def read_data_from_serial():
                     buffer.extend(ser.read(ser.in_waiting))
                 frames, buffer = get_lidar_frames_from_buffer(buffer)
                 if frames:
-                    all_frames.extend(frames)
+                    process_lidar_frames(frames)
+                    #all_frames.extend(frames)
         except serial.SerialException as e:
             print(f"シリアルポートの接続中にエラーが発生しました: {e}")
     
@@ -121,10 +148,10 @@ def visualize_lidar_data_continuously():
     try:
         global is_running
         while is_running:  # この条件を追加
-            if all_frames:
-                visualize_lidar_frames(all_frames)
-                all_frames.clear()
-            time.sleep(0.1)
+            if all_surroundings:
+                visualize_lidar_frames(all_surroundings[0])
+                all_surroundings.clear()
+            time.sleep(0.01)
 
             key = cv2.waitKey(1)
             
