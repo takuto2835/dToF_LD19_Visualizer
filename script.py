@@ -21,8 +21,10 @@ initial_mask = None
 mouse_state = 'up'
 mouse = None
 
-SCREEN_WIDTH = 2880
-SCREEN_HEIGHT = 1920
+SCREEN_WIDTH = 1440
+SCREEN_HEIGHT = 960
+
+mouse_cursors = []
 
 def create_mask_from_vertices(vertices, radius):
     """
@@ -171,7 +173,7 @@ def process_lidar_frames(frames):
 def visualize_lidar_frames(frames):
     
     try:
-        global is_running
+        global is_running, mouse_cursors
         global initial_mask, mouse_state
 
         img = np.zeros((WINDOW_WIDTH, WINDOW_HEIGHT, 3), dtype=np.uint8)
@@ -188,8 +190,8 @@ def visualize_lidar_frames(frames):
             distances = np.array([point[0] for point in frame['points']], dtype=np.float32)
             intensities = np.array([point[1] for point in frame['points']], dtype=np.float32)
 
-            xs =  distances * 0.3 * np.cos(angles)
-            ys = distances * 0.3 * np.sin(angles)
+            xs =  distances * 0.6 * np.cos(angles)
+            ys = distances * 0.6 * np.sin(angles)
             points = np.vstack((xs, ys, intensities)).T
 
             all_points = np.vstack((all_points, points))
@@ -210,7 +212,7 @@ def visualize_lidar_frames(frames):
 
                 # マスクが存在しない場合にのみ生成
         if initial_mask is None:
-            initial_mask = create_mask_from_vertices(filtered_points, 20)
+            initial_mask = create_mask_from_vertices(filtered_points, 40)
         
         img = overlay_mask_on_image(img, initial_mask)
 
@@ -219,7 +221,7 @@ def visualize_lidar_frames(frames):
 
         if masked_points.size > 0:   
             # Apply DBSCAN clustering
-            clustering = DBSCAN(eps=50, min_samples=5).fit(masked_points[:, :2])  # Consider only x and y for clustering
+            clustering = DBSCAN(eps=50, min_samples=3).fit(masked_points[:, :2])  # Consider only x and y for clustering
             labels = clustering.labels_
 
             # Find unique cluster labels and ignore noise if present
@@ -239,19 +241,60 @@ def visualize_lidar_frames(frames):
             for mean in means:
                 cv2.circle(img, (int(center[0] + mean[0]), int(center[1] + mean[1])), 5, (255, 255, 0), -1)
 
-            if means:
-                    mean = means[-1]
-                    screen_x = int( -mean[0] * 10.0 + SCREEN_WIDTH // 2) 
-                    screen_y = int(SCREEN_HEIGHT - mean[1] * 10.0) 
+            new_mouse_cursors = []
+
+            if means:                     
+
+                for mean in means:
                     
-                    mouse.position = (screen_x, screen_y)
-                    print(mouse.position)
-                    if mouse_state == 'up':
-                        mouse_state = 'down'
-                        time.sleep(0.1)  # Wait for the OS to catch up
-                        mouse.click(Button.left, 1)
-        else:
-            mouse_state = 'up'
+
+                    screen_x = int( -mean[0] * 2.2 + SCREEN_WIDTH // 2) 
+                    screen_y = int(SCREEN_HEIGHT - mean[1] * 2.2) 
+                    
+                    cursor = (screen_x, screen_y)
+
+                    new_mouse_cursors.append(cursor)
+                   
+
+                                    #過去にカーソルあったばあい
+                    if mouse_cursors:
+
+                        continuous_flag = False
+
+                        for preCursor in mouse_cursors:
+                            cursorDistance = ((preCursor[0] - cursor[0])**2 + (preCursor[1] - cursor[1])**2)** 0.5
+                            
+                            if cursorDistance < 20:
+                                continuous_flag = True
+
+                        print(continuous_flag)
+
+                        if not continuous_flag:
+                            print("click")
+                            mouse.position = cursor
+                            time.sleep(0.01)  # Wait for the OS to catch up
+                            mouse.press(Button.left)
+                            time.sleep(0.01)  # Wait for the OS to catch upc
+                            mouse.release(Button.left)
+
+                    else:#なかった場合問答無用でクリック
+                        print("click 前になかった")
+                        mouse.position = cursor
+                        time.sleep(0.01)  # Wait for the OS to catch up
+                        mouse.press(Button.left)
+                        time.sleep(0.01)  # Wait for the OS to catch upc
+                        mouse.release(Button.left)
+
+            mouse_cursors = new_mouse_cursors
+            print(mouse_cursors)
+                    
+
+
+
+
+
+
+
 
         cv2.imshow("Lidar Data", img)
 
